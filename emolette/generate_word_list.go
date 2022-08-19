@@ -8,13 +8,14 @@ import (
 	"strings"
 )
 
-var WORDS = map[int][]string{}
-var LENGTHS = map[int]int{}
+var WordsPerLength = map[int][]string{}
+var Lengths = []int{7, 8, 9, 10}
+var NbWordsPerLength = map[int]int{}
 
 func GenerateLenGoFiles() {
 	lines, err := LoadLines()
 	CheckErr(err)
-	CheckErr(LoadDict(lines, []int{7, 8, 9, 10}))
+	CheckErr(LoadDict(lines))
 }
 
 var replaces = map[string]string{
@@ -23,58 +24,62 @@ var replaces = map[string]string{
 	"ê": "e",
 	"ë": "e",
 	"à": "a",
-	"á": "a",
 	"â": "a",
-	"ä": "a",
+	"î": "i",
 	"ï": "i",
 	"ô": "o",
 	"ù": "u",
 	"û": "u",
+	"ü": "u",
 	"æ": "ae",
 	"œ": "oe",
+	"ç": "c",
 }
 
-func LoadDict(lines []string, nbLetters []int) error {
-	words := make(map[string]bool)
-	wordRegexp, err := regexp.Compile("^([a-zéèêëàáâäïôùûæœ]+)/.*$")
+func LoadDict(lines []string) error {
+	wordRegexp, err := regexp.Compile("^([a-zéèêëàâîïôùûüæœç]+)/.*$")
 	if err != nil {
 		return err
 	}
-	for _, line := range lines {
-		// remove comment lines and uncommon names like Paris or Bill
-		if !regexp.MustCompile("^[a-z]").Match([]byte(line)) {
-			continue
+	for _, nbLetters := range Lengths {
+		words := make(map[string]bool)
+		for _, line := range lines {
+			wordRegexp.Match([]byte(strings.ToLower(line)))
+			// remove comment lines and uncommon names like Paris or Bill
+			if !regexp.MustCompile("^[a-z]").Match([]byte(line)) {
+				continue
+			}
+			// word/<other things> --> keep the word
+			word := regexp.MustCompile("^([^/]*)/.*$").ReplaceAllString(line, "$1")
+			// remove any none latin character like chinese characters
+			if regexp.MustCompile("[^\\p{Latin}]").Find([]byte(word)) != nil {
+				continue
+			}
+			// remove any word containing numbers
+			if regexp.MustCompile("\\d").Find([]byte(word)) != nil {
+				continue
+			}
+			// keep only all-lowercase words
+			word = strings.ToLower(word)
+			// remove all accents
+			for k, v := range replaces {
+				word = strings.ReplaceAll(word, k, v)
+			}
+			// keep only words that are 5-letters-big
+			if len(word) != nbLetters {
+				continue
+			}
+			words[word] = false
 		}
-		// word/<other things> --> keep the word
-		word := regexp.MustCompile("^([^/]*)/.*$").ReplaceAllString(line, "$1")
-		// remove any none latin character like chinese characters
-		if regexp.MustCompile("[^\\p{Latin}]").Find([]byte(word)) != nil {
-			continue
+		log.Printf("nb for length %d is %d", nbLetters, len(words))
+		sortedWords := make([]string, 0, len(words))
+		for k := range words {
+			sortedWords = append(sortedWords, k)
 		}
-		// remove any word containing numbers
-		if regexp.MustCompile("\\d").Find([]byte(word)) != nil {
-			continue
-		}
-		// keep only all-lowercase words
-		word = strings.ToLower(word)
-		// remove all accents
-		for k, v := range replaces {
-			word = strings.ReplaceAll(word, k, v)
-		}
-		// keep only words that are 5-letters-big
-		if len(word) != nbLetters {
-			continue
-		}
-		words[word] = false
+		sort.Strings(sortedWords)
+		NbWordsPerLength[nbLetters] = len(words)
+		WordsPerLength[nbLetters] = sortedWords
 	}
-	log.Print(len(words))
-	sortedWords := make([]string, 0, len(words))
-	for k, _ := range words {
-		sortedWords = append(sortedWords, k)
-	}
-	sort.Strings(sortedWords)
-	LENGTHS[nbLetters] = len(words)
-	WORDS[nbLetters] = sortedWords
 	return nil
 }
 
